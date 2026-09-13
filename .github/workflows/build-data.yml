@@ -1,0 +1,50 @@
+name: Générer les fichiers communaux Filosofi 2021
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-data.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installer la conversion cartographique
+        run: python -m pip install --disable-pip-version-check pyproj
+
+      - name: Télécharger le CSV officiel Insee
+        run: |
+          curl --location --fail --retry 5 --output Filosofi2021_carreaux_200m_csv.zip             "https://www.insee.fr/fr/statistiques/fichier/8735162/Filosofi2021_carreaux_200m_csv.zip"
+
+      - name: Générer les fichiers JSON
+        run: python build_commune_files.py Filosofi2021_carreaux_200m_csv.zip .
+
+      - name: Vérifier le résultat
+        run: |
+          test -f index.json
+          test -f communes/16/16166.json
+          python -m json.tool communes/16/16166.json >/dev/null
+          test "$(find communes -type f -name '*.json' | wc -l)" -gt 34000
+
+      - name: Publier les données
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.json communes
+          git commit -m "Publier les carreaux Filosofi 2021 par commune"
+          git push
